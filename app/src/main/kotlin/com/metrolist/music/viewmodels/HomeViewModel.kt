@@ -14,6 +14,7 @@ import com.metrolist.innertube.models.Artist
 import com.metrolist.innertube.models.ArtistItem
 import com.metrolist.innertube.models.PlaylistItem
 import com.metrolist.innertube.models.SongItem
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.combine
 import com.metrolist.innertube.models.WatchEndpoint
 import com.metrolist.innertube.models.BrowseEndpoint
@@ -87,6 +88,15 @@ internal fun buildSpeedDialItems(
     (pinned + keepListening + quickPicks + home)
         .distinctBy { it.id }
         .take(27)
+
+internal fun buildDailySelection(
+    discovery: List<SongItem>,
+    local: List<SongItem>,
+    online: List<SongItem>,
+): List<SongItem> = (discovery + local + online)
+    .filter { it.id.isNotBlank() && it.thumbnail.isNotBlank() }
+    .distinctBy { it.id }
+    .take(8)
 
 @HiltViewModel
 class HomeViewModel @Inject constructor(
@@ -181,13 +191,12 @@ class HomeViewModel @Inject constructor(
                     },
                 home = home?.sections.orEmpty().flatMap { it.items },
             )
-        }.stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
+        }.flowOn(Dispatchers.Default)
+            .stateIn(viewModelScope, SharingStarted.Lazily, emptyList())
 
     suspend fun getRandomItem(): YTItem? {
         try {
             isRandomizing.value = true
-            // Visual feedback for the animation
-            kotlinx.coroutines.delay(1000)
 
             val userSongs = mutableListOf<YTItem>()
             val otherSources = mutableListOf<YTItem>()

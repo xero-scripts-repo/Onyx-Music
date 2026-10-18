@@ -14,12 +14,23 @@ def adb(*args, check=True):
     return subprocess.run(['adb', *args], check=check, capture_output=True).stdout
 
 
-def snapshot(name):
+def snapshot(name, recovered_launcher=False):
     (OUT / (name + '.png')).write_bytes(adb('exec-out', 'screencap', '-p'))
     adb('shell', 'uiautomator', 'dump', '/sdcard/onyx-window.xml')
     xml = adb('exec-out', 'cat', '/sdcard/onyx-window.xml')
     (OUT / (name + '.xml')).write_bytes(xml)
-    return ET.fromstring(xml)
+    root = ET.fromstring(xml)
+    if any(n.get('resource-id') == 'android:id/alertTitle' and n.get('text') == "Pixel Launcher isn't responding" for n in root.iter('node')):
+        assert not recovered_launcher, 'Pixel Launcher remained unresponsive after one recovery'
+        close = next(n for n in root.iter('node') if n.get('resource-id') == 'android:id/aerr_close')
+        b = [int(v) for v in re.findall(r'\d+', close.get('bounds', ''))]
+        assert len(b) == 4, 'Missing launcher-dialog dismissal bounds'
+        print('Emulator recovery: dismissing Pixel Launcher ANR; app ANRs remain failures')
+        (OUT / (name + '-launcher-anr.xml')).write_bytes(xml)
+        adb('shell', 'input', 'tap', str((b[0] + b[2]) // 2), str((b[1] + b[3]) // 2))
+        time.sleep(2)
+        return snapshot(name, recovered_launcher=True)
+    return root
 
 
 def tap_label(root, label):
@@ -36,7 +47,22 @@ def tap_label(root, label):
     time.sleep(2)
 
 
-adb('install', '-r', 'dist/Onyx-Music.apk')
+def scroll_to_label(root, label, name='find-control', max_swipes=6):
+    width, height = map(int, re.search(r'(\d+)x(\d+)', adb('shell', 'wm', 'size').decode()).groups())
+    for attempt in range(max_swipes + 1):
+        if any(label.lower() in (n.get('text', '') + ' ' + n.get('content-desc', '')).lower()
+               for n in root.iter('node')):
+            return root
+        if attempt == max_swipes:
+            break
+        adb('shell', 'input', 'swipe', str(width // 2), str(int(height * .76)),
+            str(width // 2), str(int(height * .38)), '350')
+        time.sleep(.5)
+        root = snapshot(name + '-' + str(attempt))
+    raise AssertionError('Missing control after scrolling: ' + label)
+
+
+adb('install', '-r', 'dist/Sonet.apk')
 adb('shell', 'pm', 'grant', PACKAGE, 'android.permission.POST_NOTIFICATIONS', check=False)
 adb('logcat', '-c')
 adb('shell', 'am', 'start', '-W', '-n', ACTIVITY)
@@ -45,6 +71,23 @@ assert adb('shell', 'pidof', PACKAGE).strip(), 'App terminated during launch'
 home = snapshot('01-home')
 tap_label(home, 'library')
 library = snapshot('02-library')
+for index, tab in enumerate(['home', 'library', 'home', 'library']):
+    root = library
+    matches = []
+    for node in root.iter('node'):
+        if node.get('text', '').lower() == tab:
+            bounds = [int(v) for v in re.findall(r'\d+', node.get('bounds', ''))]
+            if len(bounds) == 4:
+                matches.append(bounds)
+    assert matches, 'Missing navigation tab: ' + tab
+    left, top, right, bottom = max(matches, key=lambda b: b[3])
+    adb('shell', 'input', 'tap', str((left + right) // 2), str((top + bottom) // 2))
+    time.sleep(.06)
+    (OUT / ('02-transition-' + str(index) + '.png')).write_bytes(adb('exec-out', 'screencap', '-p'))
+time.sleep(.4)
+library = snapshot('02-after-interrupted-tabs')
+assert not any(n.get('text', '') == 'Made for your next favorite song.' for n in library.iter('node')), 'Home remained over the Library after tab navigation'
+
 assert any(
     node.get('selected') == 'true' and any(
         'library' in (child.get('text', '') + child.get('content-desc', '')).lower()
@@ -57,7 +100,7 @@ time.sleep(3)
 snapshot('03-library-landscape')
 adb('shell', 'settings', 'put', 'system', 'user_rotation', '0')
 time.sleep(2)
-tap_label(snapshot('04-library-portrait'), 'search')
+tap_label(scroll_to_label(snapshot('04-library-portrait'), 'search', '04-library-search'), 'search')
 search = snapshot('05-search')
 assert any(n.get('class', '').endswith('EditText') for n in search.iter('node')), 'Search input did not open'
 adb('shell', 'input', 'keyevent', 'KEYCODE_BACK')

@@ -32,6 +32,10 @@ import com.metrolist.music.ui.theme.onyxGlass
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.semantics.Role
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.clickable
@@ -43,6 +47,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -78,7 +83,7 @@ fun AppNavigationRail(
     onSearchLongClick: (() -> Unit)? = null,
     onHomeLongHold: (() -> Unit)? = null,
 ) {
-    val containerColor = Color.Black
+    val containerColor = MaterialTheme.colorScheme.surfaceContainerLow
     val haptics = LocalHapticFeedback.current
     val viewConfiguration = LocalViewConfiguration.current
 
@@ -160,19 +165,18 @@ fun AppNavigationBar(
     onSearchLongClick: (() -> Unit)? = null,
     onHomeLongHold: (() -> Unit)? = null,
 ) {
-    val containerColor = if (pureBlack) Color.Black else MaterialTheme.colorScheme.surfaceContainer
-    val contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+    val navigationScrim = remember {
+        Brush.verticalGradient(0f to Color(0xEB000000), 1f to Color(0xFF000000))
+    }
     val haptics = LocalHapticFeedback.current
     val viewConfiguration = LocalViewConfiguration.current
 
     Row(
         modifier = modifier
             .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 4.dp)
-            .clip(RoundedCornerShape(50))
-            .background(MaterialTheme.colorScheme.surfaceContainer)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(50))
-            .padding(horizontal = 7.dp, vertical = 5.dp),
+            .padding(horizontal = 24.dp, vertical = if (slimNav) 0.dp else 3.dp)
+            .onyxGlass(RoundedCornerShape(50))
+            .padding(horizontal = 5.dp, vertical = 2.dp),
         horizontalArrangement = Arrangement.spacedBy(3.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -204,17 +208,16 @@ fun AppNavigationBar(
                     }
                 }
             }
-            val pillShape = RoundedCornerShape(50)
-            val selectedFill by animateColorAsState(
-                targetValue = if (selected) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent,
-                animationSpec = tween(180),
-                label = "navigationSelection",
+            val highlight by animateColorAsState(
+                if (selected) MaterialTheme.colorScheme.onSurface else Color.Transparent,
+                tween(180), label = "dock selection",
             )
+            val tint = if (selected) MaterialTheme.colorScheme.surface else MaterialTheme.colorScheme.onSurfaceVariant
             Column(
                 modifier = Modifier
                     .weight(1f)
-                    .clip(pillShape)
-                    .background(selectedFill)
+                    .clip(RoundedCornerShape(50))
+                    .background(highlight)
                     .selectable(
                         selected = selected,
                         role = Role.Tab,
@@ -225,26 +228,26 @@ fun AppNavigationBar(
                         }
                     )
                     .heightIn(min = 48.dp)
-                    .padding(vertical = if (slimNav) 8.dp else 7.dp),
+                    .padding(vertical = 4.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
+                verticalArrangement = Arrangement.spacedBy(3.dp, Alignment.CenterVertically),
             ) {
                 Icon(
                     painter = painterResource(
                         if (selected) screen.iconIdActive else screen.iconIdInactive
                     ),
                     contentDescription = stringResource(screen.titleId),
-                    tint = if (selected) Color.White else contentColor,
-                    modifier = Modifier.size(23.dp),
+                    tint = tint,
+                    modifier = Modifier.size(22.dp),
                 )
                 if (!slimNav) {
                     Text(
                         text = stringResource(screen.titleId),
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis,
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
-                        color = if (selected) MaterialTheme.colorScheme.onSurface else contentColor,
+                        style = MaterialTheme.typography.labelSmall.copy(fontSize = 11.sp),
+                        fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                        color = tint,
                     )
                 }
             }

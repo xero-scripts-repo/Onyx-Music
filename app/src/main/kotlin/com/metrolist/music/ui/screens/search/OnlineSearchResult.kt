@@ -283,6 +283,7 @@ fun OnlineSearchResult(
         }
         YouTubeListItem(
             item = item,
+            showDivider = item !is ArtistItem,
             isActive =
                 when (item) {
                     is SongItem -> mediaMetadata?.id == item.id
@@ -303,6 +304,7 @@ fun OnlineSearchResult(
             },
             modifier =
                 Modifier
+                    .artistSearchTint(item)
                     .combinedClickable(
                         onClick = {
                             when (item) {
